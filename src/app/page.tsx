@@ -89,5 +89,3 @@ export default function HomePage() {
   );
 }
 
-// Mark the file as a Client Component
-// Add this at the top of a new file named 'navigation-buttons.tsx'

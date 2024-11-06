@@ -1,18 +1,19 @@
-// src/app/(auth)/register/page.tsx
-import { auth } from '@/lib/auth/auth'
-import { redirect } from 'next/navigation'
+import { RegisterForm } from "@/components/auth/RegisterForm";
 
-export default async function RegisterPage() {
-  // TODO: Check if user is already authenticated
-  // If yes, redirect to dashboard
-
+export default function RegisterPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="w-full max-w-md">
-        {/* TODO: Add RegisterForm component */}
-        {/* TODO: Add OAuth providers */}
-        {/* TODO: Add terms of service acceptance */}
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h2 className="text-3xl font-bold tracking-tight">
+            Create your account
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Start organizing your tasks today
+          </p>
+        </div>
+        <RegisterForm />
       </div>
     </div>
-  )
+  );
 }
