@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String?
+  password      String // Hashed
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  lists         List[]       @relation("ListOwner")
+  sharedLists   SharedList[]
+}
+
+model List {
+  id          String       @id @default(cuid())
+  name        String
+  ownerId     String
+  owner       User         @relation("ListOwner", fields: [ownerId], references: [id])
+  parentId    String?      @map("parent_list_id")
+  parent      List?        @relation("ListHierarchy", fields: [parentId], references: [id])
+  children    List[]       @relation("ListHierarchy")
+  tasks       Task[]
+  sharedWith  SharedList[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([ownerId])
+  @@index([parentId])
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  priority    Priority   @default(NORMAL)
+  tags        String[]
+  status      Status     @default(TODO)
+  position    Int
+  listId      String
+  list        List       @relation(fields: [listId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([listId])
+}
+
+model SharedList {
+  id            String         @id @default(cuid())
+  listId        String
+  userId        String
+  list          List           @relation(fields: [listId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  permissionLevel PermissionLevel @default(VIEW)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([listId, userId])
+  @@index([userId])
+  @@index([listId])
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum Status {
+  TODO
+  IN_PROGRESS
+  DONE
+  ARCHIVED
+}
+
+enum PermissionLevel {
+  VIEW
+  EDIT
+  ADMIN
+}
