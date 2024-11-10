@@ -1,14 +1,9 @@
-import React from 'react';
+// src/app/layout.tsx
 import { Inter } from 'next/font/google';
-import { NavBar } from '@/components/navigation/NavBar';
-import { Toaster } from '@/components/ui/toaster';
+import { ToastProvider } from '@/components/ui/toast-context';
+import { SocketProvider } from '@/hooks/socket-context';
 
 const inter = Inter({ subsets: ['latin'] });
-
-export const metadata = {
-  title: 'Privacy-Focused Todo App',
-  description: 'A secure, self-hosted todo list application with real-time collaboration',
-};
 
 export default function RootLayout({
   children,
@@ -18,9 +13,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <NavBar />
-        <main className="min-h-screen pt-16">{children}</main>
-        <Toaster />
+        <SocketProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
+        </SocketProvider>
       </body>
     </html>
   );
