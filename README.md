@@ -61,9 +61,6 @@ npm run dev
 - `/public`: Static assets
 - `/tests`: Unit and integration tests
 
-## Contributing
-
-[TODO: Add contribution guidelines]
 
 ## License
 
