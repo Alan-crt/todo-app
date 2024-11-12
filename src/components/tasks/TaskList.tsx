@@ -1,319 +1,275 @@
-import React, { useState, useMemo, useCallback, useTransition } from 'react';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import { Search, Filter, Check, MoreHorizontal } from 'lucide-react';
-import { Task, Status, Priority } from '@/types/task';
+import React, { useState, useCallback } from 'react';
+import { Plus, Template, Edit2, Copy, Trash2 } from 'lucide-react';
+import { Task, Priority, Status } from '@/types/task';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Dropdown } from '@/components/ui/Dropdown';
+import { Modal } from '@/components/ui/Modal';
+import { TaskForm } from '@/components/tasks/TaskForm';
 
-interface TaskListProps {
-  tasks: Task[];
-  onTaskUpdate: (taskId: string, updates: Partial<Task>) => Promise<void>;
-  onTasksReorder: (startIndex: number, endIndex: number) => Promise<void>;
-  onBulkUpdate: (taskIds: string[], updates: Partial<Task>) => Promise<void>;
-  isLoading?: boolean;
+// Type definitions for templates
+interface TaskTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  template: Partial<Task>;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export function TaskList({
-  tasks,
-  onTaskUpdate,
-  onTasksReorder,
-  onBulkUpdate,
-  isLoading
-}: TaskListProps) {
-  // State management
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+interface TaskTemplatesProps {
+  listId: string;
+  onApplyTemplate: (template: Partial<Task>) => Promise<void>;
+}
+
+export function TaskTemplates({ listId, onApplyTemplate }: TaskTemplatesProps) {
+  const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<TaskTemplate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<Status | 'ALL'>('ALL');
-  const [priorityFilter, setPriorityFilter] = useState<Priority | 'ALL'>('ALL');
-  const [isPending, startTransition] = useTransition();
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Memoized filtered tasks
-  const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
-      const matchesSearch = searchQuery === '' || 
-        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesStatus = statusFilter === 'ALL' || task.status === statusFilter;
-      const matchesPriority = priorityFilter === 'ALL' || task.priority === priorityFilter;
-      
-      return matchesSearch && matchesStatus && matchesPriority;
-    });
-  }, [tasks, searchQuery, statusFilter, priorityFilter]);
+  // Filter templates based on search query
+  const filteredTemplates = templates.filter(template =>
+    template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    template.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // Drag and drop handlers
-  const handleDragEnd = useCallback(async (result: any) => {
-    if (!result.destination) return;
-
-    const sourceIndex = result.source.index;
-    const destinationIndex = result.destination.index;
-
-    if (sourceIndex === destinationIndex) return;
-
+  // Template CRUD operations
+  const handleCreateTemplate = async (templateData: Partial<Task>) => {
+    setIsLoading(true);
     try {
-      await onTasksReorder(sourceIndex, destinationIndex);
+      const response = await fetch('/api/task-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateData.title,
+          description: templateData.description,
+          template: templateData,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to create template');
+
+      const newTemplate = await response.json();
+      setTemplates(prev => [...prev, newTemplate]);
+      setIsCreateModalOpen(false);
+      window.showToast('Template created successfully', 'success');
     } catch (error) {
-      console.error('Failed to reorder tasks:', error);
-      window.showToast('Failed to reorder tasks', 'error');
-    }
-  }, [onTasksReorder]);
-
-  // Bulk operations
-  const handleSelectAll = useCallback(() => {
-    if (selectedTasks.size === filteredTasks.length) {
-      setSelectedTasks(new Set());
-    } else {
-      setSelectedTasks(new Set(filteredTasks.map(task => task.id)));
-    }
-  }, [filteredTasks, selectedTasks]);
-
-  const handleTaskSelect = useCallback((taskId: string) => {
-    setSelectedTasks(prev => {
-      const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-      } else {
-        next.add(taskId);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleBulkStatusUpdate = async (status: Status) => {
-    try {
-      await onBulkUpdate(Array.from(selectedTasks), { status });
-      setSelectedTasks(new Set());
-      window.showToast('Tasks updated successfully', 'success');
-    } catch (error) {
-      window.showToast('Failed to update tasks', 'error');
+      window.showToast('Failed to create template', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleBulkPriorityUpdate = async (priority: Priority) => {
+  const handleEditTemplate = async (templateData: Partial<Task>) => {
+    if (!selectedTemplate) return;
+    
+    setIsLoading(true);
     try {
-      await onBulkUpdate(Array.from(selectedTasks), { priority });
-      setSelectedTasks(new Set());
-      window.showToast('Tasks updated successfully', 'success');
+      const response = await fetch(`/api/task-templates/${selectedTemplate.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateData.title,
+          description: templateData.description,
+          template: templateData,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update template');
+
+      const updatedTemplate = await response.json();
+      setTemplates(prev => 
+        prev.map(t => t.id === selectedTemplate.id ? updatedTemplate : t)
+      );
+      setIsEditModalOpen(false);
+      window.showToast('Template updated successfully', 'success');
     } catch (error) {
-      window.showToast('Failed to update tasks', 'error');
+      window.showToast('Failed to update template', 'error');
+    } finally {
+      setIsLoading(false);
+      setSelectedTemplate(null);
     }
   };
 
-  // Search handler with debounce
-  const handleSearch = (value: string) => {
-    startTransition(() => {
-      setSearchQuery(value);
-    });
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm('Are you sure you want to delete this template?')) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/task-templates/${templateId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) throw new Error('Failed to delete template');
+
+      setTemplates(prev => prev.filter(t => t.id !== templateId));
+      window.showToast('Template deleted successfully', 'success');
+    } catch (error) {
+      window.showToast('Failed to delete template', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleApplyTemplate = async (template: TaskTemplate) => {
+    try {
+      await onApplyTemplate({
+        ...template.template,
+        listId,
+      });
+      window.showToast('Template applied successfully', 'success');
+    } catch (error) {
+      window.showToast('Failed to apply template', 'error');
+    }
   };
 
   return (
     <div className="space-y-4">
-      {/* Filters and Search */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <Input
-            type="text"
-            placeholder="Search tasks..."
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="w-full sm:w-64"
-            leftIcon={<Search className="w-4 h-4 text-gray-400" />}
-          />
-          <Dropdown
-            trigger={
-              <Button variant="outline" size="sm">
-                <Filter className="w-4 h-4 mr-2" />
-                Filters
-              </Button>
-            }
+      {/* Header and Search */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-semibold">Task Templates</h2>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsCreateModalOpen(true)}
           >
-            <div className="p-2 space-y-2">
-              <div>
-                <label className="text-sm font-medium">Status</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as Status | 'ALL')}
-                  className="mt-1 block w-full rounded-md border-gray-300 text-sm"
-                >
-                  <option value="ALL">All Statuses</option>
-                  {Object.values(Status).map(status => (
-                    <option key={status} value={status}>
-                      {status.replace('_', ' ')}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Priority</label>
-                <select
-                  value={priorityFilter}
-                  onChange={(e) => setPriorityFilter(e.target.value as Priority | 'ALL')}
-                  className="mt-1 block w-full rounded-md border-gray-300 text-sm"
-                >
-                  <option value="ALL">All Priorities</option>
-                  {Object.values(Priority).map(priority => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </Dropdown>
+            <Plus className="w-4 h-4 mr-2" />
+            New Template
+          </Button>
         </div>
-
-        {/* Bulk Actions */}
-        {selectedTasks.size > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">
-              {selectedTasks.size} selected
-            </span>
-            <Dropdown
-              trigger={
-                <Button variant="outline" size="sm">
-                  Bulk Actions
-                </Button>
-              }
-            >
-              <div className="py-1">
-                <div className="px-3 py-2 text-xs font-semibold text-gray-500">
-                  Set Status
-                </div>
-                {Object.values(Status).map(status => (
-                  <button
-                    key={status}
-                    className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-                    onClick={() => handleBulkStatusUpdate(status)}
-                  >
-                    {status.replace('_', ' ')}
-                  </button>
-                ))}
-                <div className="px-3 py-2 text-xs font-semibold text-gray-500">
-                  Set Priority
-                </div>
-                {Object.values(Priority).map(priority => (
-                  <button
-                    key={priority}
-                    className="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100"
-                    onClick={() => handleBulkPriorityUpdate(priority)}
-                  >
-                    {priority}
-                  </button>
-                ))}
-              </div>
-            </Dropdown>
-          </div>
-        )}
+        <Input
+          type="text"
+          placeholder="Search templates..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-64"
+        />
       </div>
 
-      {/* Task List */}
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="tasks">
-          {(provided) => (
-            <div
-              {...provided.droppableProps}
-              ref={provided.innerRef}
-              className="space-y-2"
-            >
-              {/* Select All Header */}
-              <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-                <input
-                  type="checkbox"
-                  checked={selectedTasks.size === filteredTasks.length && filteredTasks.length > 0}
-                  onChange={handleSelectAll}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600"
-                />
-                <span className="ml-3 text-sm text-gray-500">
-                  {selectedTasks.size === filteredTasks.length
-                    ? 'Deselect all'
-                    : 'Select all'}
-                </span>
+      {/* Templates Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredTemplates.map(template => (
+          <div
+            key={template.id}
+            className="p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="font-medium text-gray-900">{template.name}</h3>
+                {template.description && (
+                  <p className="mt-1 text-sm text-gray-500 line-clamp-2">
+                    {template.description}
+                  </p>
+                )}
               </div>
-
-              {/* Tasks */}
-              {filteredTasks.map((task, index) => (
-                <Draggable key={task.id} draggableId={task.id} index={index}>
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                      className={`
-                        p-4 bg-white rounded-lg border
-                        ${snapshot.isDragging ? 'shadow-lg' : 'shadow-sm'}
-                        ${selectedTasks.has(task.id) ? 'border-blue-500' : 'border-gray-200'}
-                      `}
-                    >
-                      <div className="flex items-start gap-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedTasks.has(task.id)}
-                          onChange={() => handleTaskSelect(task.id)}
-                          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-medium text-gray-900">
-                            {task.title}
-                          </h3>
-                          {task.description && (
-                            <p className="mt-1 text-sm text-gray-500 line-clamp-2">
-                              {task.description}
-                            </p>
-                          )}
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <span className={`
-                              inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                              ${task.priority === Priority.URGENT ? 'bg-red-100 text-red-800' :
-                                task.priority === Priority.HIGH ? 'bg-orange-100 text-orange-800' :
-                                task.priority === Priority.NORMAL ? 'bg-blue-100 text-blue-800' :
-                                'bg-gray-100 text-gray-800'}
-                            `}>
-                              {task.priority}
-                            </span>
-                            <span className={`
-                              inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
-                              ${task.status === Status.DONE ? 'bg-green-100 text-green-800' :
-                                task.status === Status.IN_PROGRESS ? 'bg-yellow-100 text-yellow-800' :
-                                task.status === Status.ARCHIVED ? 'bg-gray-100 text-gray-800' :
-                                'bg-blue-100 text-blue-800'}
-                            `}>
-                              {task.status.replace('_', ' ')}
-                            </span>
-                            {task.tags.map(tag => (
-                              <span
-                                key={tag}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-              {provided.placeholder}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedTemplate(template);
+                    setIsEditModalOpen(true);
+                  }}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleApplyTemplate(template)}
+                  className="p-1 text-gray-400 hover:text-gray-600"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteTemplate(template.id)}
+                  className="p-1 text-gray-400 hover:text-red-600"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          )}
-        </Droppable>
-      </DragDropContext>
+
+            <div className="mt-4">
+              <div className="flex flex-wrap gap-2">
+                {template.template.priority && (
+                  <span className={`
+                    inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                    ${template.template.priority === Priority.URGENT ? 'bg-red-100 text-red-800' :
+                      template.template.priority === Priority.HIGH ? 'bg-orange-100 text-orange-800' :
+                      template.template.priority === Priority.NORMAL ? 'bg-blue-100 text-blue-800' :
+                      'bg-gray-100 text-gray-800'}
+                  `}>
+                    {template.template.priority}
+                  </span>
+                )}
+                {template.template.tags?.map(tag => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Empty State */}
-      {filteredTasks.length === 0 && !isLoading && (
+      {filteredTemplates.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-gray-500">No tasks found</p>
+          <Template className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">No templates</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Get started by creating a new template
+          </p>
+          <div className="mt-6">
+            <Button onClick={() => setIsCreateModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Template
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Loading State */}
-      {isLoading && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">Loading tasks...</p>
-        </div>
-      )}
+      {/* Create Template Modal */}
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        title="Create Task Template"
+      >
+        <TaskForm
+          listId={listId}
+          onSubmit={handleCreateTemplate}
+          onCancel={() => setIsCreateModalOpen(false)}
+          isLoading={isLoading}
+        />
+      </Modal>
+
+      {/* Edit Template Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedTemplate(null);
+        }}
+        title="Edit Task Template"
+      >
+        {selectedTemplate && (
+          <TaskForm
+            listId={listId}
+            initialData={selectedTemplate.template}
+            onSubmit={handleEditTemplate}
+            onCancel={() => {
+              setIsEditModalOpen(false);
+              setSelectedTemplate(null);
+            }}
+            isLoading={isLoading}
+          />
+        )}
+      </Modal>
     </div>
   );
 }
